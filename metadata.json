@@ -1,0 +1,7 @@
+{
+  "name": "MadrasahKu",
+  "description": "Sistem Informasi Madrasah Terpadu untuk administrasi, akademik, tahfidz, dan keuangan.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
