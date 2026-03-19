@@ -1,15 +1,32 @@
 # MadrasahKu - Sistem Manajemen Madrasah Digital
 
-MadrasahKu adalah platform manajemen sekolah terintegrasi yang dirancang khusus untuk madrasah dan pondok pesantren. Platform ini mencakup manajemen akademik, presensi santri berbasis QR, e-Rapor digital, manajemen keuangan, dan sistem komunikasi wali murid.
+MadrasahKu adalah platform manajemen sekolah terintegrasi yang dirancang khusus untuk madrasah dan pondok pesantren. Platform ini mencakup manajemen akademik, data induk santri, progres tahfidz, presensi, manajemen keuangan dengan gateway pembayaran, dan sistem komunikasi wali murid.
 
-## Fitur Utama
+## Fitur Utama & Modul Terbaru
 
-- **Dashboard Real-time**: Ringkasan statistik kehadiran, keuangan, dan aktivitas akademik.
-- **Presensi Digital (QR Code)**: Pencatatan kehadiran santri menggunakan pemindaian QR Code dengan notifikasi otomatis ke wali murid via WhatsApp.
-- **E-Rapor Digital**: Transparansi nilai akademik dan kepesantrenan yang dapat diakses oleh guru, santri, dan wali murid.
-- **Manajemen Keuangan**: Pelacakan pembayaran SPP dan biaya pendidikan lainnya.
-- **Modul Tahfidz**: Pemantauan progres hafalan Al-Qur'an santri.
-- **Komunikasi Terpadu**: Sistem pengiriman pesan dan pengumuman kepada wali murid.
+- **Dashboard Real-time**: Ringkasan statistik kehadiran, keuangan, dan aktivitas akademik dengan visualisasi data yang interaktif.
+- **Data Induk Santri (Master Data)**: Manajemen lengkap data santri (CRUD) dengan validasi NIS unik, pencarian cepat, dan integrasi kontak orang tua.
+- **Modul Tahfidz & Diniyah**: 
+  - Pemantauan progres hafalan Al-Qur'an santri.
+  - Grafik batang individual untuk melihat tren setoran hafalan setiap santri selama 6 bulan terakhir.
+  - Statistik dinamis untuk setoran mingguan dan prestasi terbaik.
+- **Manajemen Keuangan & Payment Gateway**: 
+  - Pelacakan pembayaran SPP dan biaya pendidikan.
+  - Konfigurasi mandiri untuk gateway pembayaran **Midtrans** dan **Xendit** (Sandbox & Production).
+- **Presensi Digital**: Pencatatan kehadiran santri dengan status kehadiran yang terintegrasi.
+- **Akademik & E-Rapor**: Transparansi nilai akademik yang tersimpan secara terpusat.
+- **Komunikasi Terpadu**: Sistem pengumuman dan pesan untuk koordinasi antara sekolah dan wali murid.
+
+## Arsitektur Teknologi
+
+- **Frontend**: React 18+ dengan TypeScript.
+- **Styling**: Tailwind CSS untuk antarmuka yang modern dan responsif.
+- **Animasi**: Motion (framer-motion) untuk transisi UI yang halus.
+- **Visualisasi Data**: Recharts untuk grafik perkembangan hafalan dan statistik.
+- **Autentikasi**: Firebase Auth (Google Login).
+- **Backend & Database**: 
+  - **Google Apps Script (GAS)** sebagai API serverless.
+  - **Google Sheets** sebagai database utama untuk kemudahan akses data secara langsung.
 
 ## Persyaratan Sistem
 
@@ -31,7 +48,7 @@ MadrasahKu adalah platform manajemen sekolah terintegrasi yang dirancang khusus 
    ```
 
 3. Konfigurasi variabel lingkungan:
-   Salin file `.env.example` menjadi `.env` dan isi nilai yang diperlukan:
+   Salin file `.env.example` menjadi `.env` dan isi nilai yang diperlukan (Firebase Config, GAS URL, Payment Keys):
    ```bash
    cp .env.example .env
    ```
@@ -42,53 +59,20 @@ MadrasahKu adalah platform manajemen sekolah terintegrasi yang dirancang khusus 
    ```
    Aplikasi akan berjalan di `http://localhost:3000`.
 
-## Panduan Implementasi Produksi
-
-### 1. Persiapan Build
-Sebelum melakukan deployment, buatlah build produksi untuk mengoptimalkan performa frontend:
-```bash
-npm run build
-```
-Hasil build akan berada di direktori `dist/`.
-
-### 2. Variabel Lingkungan Produksi
-Pastikan variabel lingkungan berikut telah dikonfigurasi di server produksi Anda:
-- `NODE_ENV=production`
-- `PORT=3000`
-- `TWILIO_ACCOUNT_SID`: (Opsional) Untuk fitur WhatsApp.
-- `TWILIO_AUTH_TOKEN`: (Opsional) Untuk fitur WhatsApp.
-- `TWILIO_WHATSAPP_NUMBER`: (Opsional) Nomor pengirim WhatsApp.
-
-### 3. Menjalankan di Produksi
-Gunakan perintah berikut untuk menjalankan aplikasi dalam mode produksi:
-```bash
-npm start
-```
-Untuk menjaga aplikasi tetap berjalan di latar belakang, disarankan menggunakan process manager seperti **PM2**:
-```bash
-npm install -g pm2
-pm2 start server.ts --name madrasahku --interpreter tsx
-```
-
-### 4. Deployment ke Cloud (Contoh: Google Cloud Run)
-Aplikasi ini siap untuk dideploy ke kontainer seperti Google Cloud Run.
-1. Pastikan `Dockerfile` tersedia (jika diperlukan).
-2. Build image dan push ke Container Registry.
-3. Deploy dengan mengekspos port `3000`.
-
 ## Struktur Proyek
 
-- `/src/pages`: Halaman utama aplikasi (Dashboard, Akademik, Presensi, dll).
-- `/src/components`: Komponen UI yang dapat digunakan kembali.
-- `/src/context`: Pengelolaan state global (seperti AuthContext).
-- `/server.ts`: Entry point backend Express untuk menangani API dan serving frontend.
-- `/vite.config.ts`: Konfigurasi build Vite dan Tailwind CSS.
+- `/src/pages`: Halaman modul aplikasi (Dashboard, Santri, Tahfidz, Keuangan, dll).
+- `/src/components`: Komponen UI reusable (Layout, Modals, Charts).
+- `/src/services`: Logika integrasi API (apiService.ts) untuk komunikasi dengan GAS.
+- `/src/context`: Pengelolaan state global (AuthContext).
+- `/code.gs`: Skrip backend Google Apps Script.
+- `/server.ts`: Entry point backend Express untuk serving frontend di lingkungan produksi.
 
-## Keamanan
+## Keamanan & Validasi
 
-- Gunakan HTTPS untuk semua koneksi produksi.
-- Pastikan rahasia API (seperti Twilio) tidak terekspos di sisi klien (frontend).
-- Selalu validasi input di sisi server untuk API presensi dan nilai.
+- **Validasi Input**: Implementasi validasi ketat untuk NIS (numerik 4-12 digit) dan format nomor telepon Indonesia.
+- **Keamanan API**: Penggunaan variabel lingkungan (`Secrets`) untuk menyimpan kunci API pembayaran agar tidak terekspos di sisi klien.
+- **Autentikasi**: Proteksi rute berbasis peran (Admin, Guru, Wali, Siswa).
 
 ---
-© 2026 MadrasahKu Team. Dibuat untuk kemajuan pendidikan Islam digital.
+© 2026 MadrasahKu Team. Dibuat untuk kemajuan pendidikan Islam digital yang modern dan transparan.
