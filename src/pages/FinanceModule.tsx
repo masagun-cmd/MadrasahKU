@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, 
   History, 
@@ -6,9 +6,14 @@ import {
   Download,
   ArrowUpRight,
   ArrowDownLeft,
-  Filter
+  Filter,
+  Loader2,
+  X,
+  Save,
+  Plus
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { apiService } from '../services/apiService';
 
 const transactions = [
   { id: 1, type: 'SPP', amount: 500000, date: '2024-03-15', status: 'Lunas', student: 'Ahmad Fauzi' },
@@ -17,6 +22,86 @@ const transactions = [
 ];
 
 export default function FinanceModule() {
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  // Form state
+  const [selectedStudent, setSelectedStudent] = useState('');
+  const [type, setType] = useState('SPP');
+  const [amount, setAmount] = useState('');
+  const [status, setStatus] = useState('Lunas');
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [financeData, studentData] = await Promise.all([
+        apiService.getFinance(),
+        apiService.getStudents()
+      ]);
+
+      if (financeData) {
+        const mapped = financeData.map((item: any, index: number) => {
+          const student = studentData?.find((s: any) => String(s.id) === String(item.studentid));
+          return {
+            id: index,
+            student: student ? student.name : `Santri ${item.studentid}`,
+            type: item.type,
+            amount: Number(item.amount),
+            date: item.date ? new Date(item.date).toLocaleDateString('id-ID') : '-',
+            status: item.status
+          };
+        }).reverse();
+        setTransactions(mapped);
+      }
+
+      if (studentData) {
+        setStudents(studentData);
+      }
+    } catch (error) {
+      console.error('Error fetching finance data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent || !amount) return;
+
+    setIsSaving(true);
+    try {
+      await apiService.saveFinance(selectedStudent, type, Number(amount), new Date().toISOString(), status);
+      setShowModal(false);
+      // Reset form
+      setSelectedStudent('');
+      setType('SPP');
+      setAmount('');
+      setStatus('Lunas');
+      // Refresh data
+      fetchData();
+    } catch (error) {
+      console.error('Error saving finance:', error);
+      alert('Gagal menyimpan transaksi.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const totalIncome = transactions
+    .filter(t => t.status === 'Lunas')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const totalPending = transactions
+    .filter(t => t.status === 'Tertunda')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -29,12 +114,100 @@ export default function FinanceModule() {
             <Download size={18} />
             Export Laporan
           </button>
-          <button className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">
-            <CreditCard size={18} />
+          <button 
+            onClick={() => setShowModal(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+          >
+            <Plus size={18} />
             Buat Tagihan
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Buat Tagihan Baru</h3>
+                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSave} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Pilih Santri</label>
+                  <select 
+                    value={selectedStudent}
+                    onChange={(e) => setSelectedStudent(e.target.value)}
+                    required
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="">Pilih Santri...</option>
+                    {students.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Jenis</label>
+                    <select 
+                      value={type}
+                      onChange={(e) => setType(e.target.value)}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="SPP">SPP</option>
+                      <option value="Infaq">Infaq</option>
+                      <option value="Pembangunan">Pembangunan</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Jumlah (Rp)</label>
+                    <input 
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="500000"
+                      required
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
+                  <select 
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="Lunas">Lunas</option>
+                    <option value="Tertunda">Tertunda</option>
+                  </select>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isSaving}
+                  className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                  {isSaving ? 'Menyimpan...' : 'Simpan Transaksi'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
@@ -46,8 +219,8 @@ export default function FinanceModule() {
                 </div>
                 <span className="text-xs font-bold uppercase tracking-widest opacity-80">Total Pendapatan</span>
               </div>
-              <p className="text-sm opacity-80">Bulan Maret 2024</p>
-              <p className="text-3xl font-bold mt-1">Rp 45.250.000</p>
+              <p className="text-sm opacity-80">Total Pendapatan</p>
+              <p className="text-3xl font-bold mt-1">Rp {totalIncome.toLocaleString()}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between mb-8">
@@ -56,8 +229,8 @@ export default function FinanceModule() {
                 </div>
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tunggakan SPP</span>
               </div>
-              <p className="text-sm text-slate-500">Total 12 Siswa</p>
-              <p className="text-3xl font-bold text-slate-900 mt-1">Rp 6.000.000</p>
+              <p className="text-sm text-slate-500">Total Tunggakan</p>
+              <p className="text-3xl font-bold text-slate-900 mt-1">Rp {totalPending.toLocaleString()}</p>
             </div>
           </div>
 
@@ -80,28 +253,43 @@ export default function FinanceModule() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {transactions.map((t) => (
-                    <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-slate-900">{t.student}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-medium text-slate-600">{t.type}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-slate-900">Rp {t.amount.toLocaleString()}</p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-500">{t.date}</td>
-                      <td className="px-6 py-4">
-                        <span className={cn(
-                          "text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider",
-                          t.status === 'Lunas' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                        )}>
-                          {t.status}
-                        </span>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-10 text-center">
+                        <Loader2 size={32} className="text-emerald-600 animate-spin mx-auto mb-2" />
+                        <p className="text-xs text-slate-400">Memuat data...</p>
                       </td>
                     </tr>
-                  ))}
+                  ) : transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-10 text-center text-slate-400 text-sm">
+                        Belum ada transaksi.
+                      </td>
+                    </tr>
+                  ) : (
+                    transactions.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-bold text-slate-900">{t.student}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-medium text-slate-600">{t.type}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-bold text-slate-900">Rp {t.amount.toLocaleString()}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500">{t.date}</td>
+                        <td className="px-6 py-4">
+                          <span className={cn(
+                            "text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider",
+                            t.status === 'Lunas' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                          )}>
+                            {t.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

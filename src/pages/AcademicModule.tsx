@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   GraduationCap, 
   Calendar, 
@@ -10,10 +10,14 @@ import {
   Save,
   User,
   BookOpen,
-  ArrowLeft
+  ArrowLeft,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/apiService';
 
 const schedule = [
   { day: 'Senin', items: [
@@ -46,15 +50,110 @@ export default function AcademicModule() {
   const { user } = useAuth();
   const [activeView, setActiveView] = useState<'dashboard' | 'erapor'>('dashboard');
   const [students, setStudents] = useState(initialStudents);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        const data = await apiService.getStudents();
+        if (data && Array.isArray(data) && data.length > 0) {
+          // Map GAS data to our student structure
+          // GAS returns lowercase keys from headers
+          const mappedStudents = data.map((s: any) => ({
+            id: String(s.id),
+            name: s.name,
+            grades: s.grades ? JSON.parse(s.grades) : {
+              'Tahfidz Al-Qur\'an': 0,
+              'Fiqih': 0,
+              'Bahasa Arab': 0,
+              'Aqidah Akhlak': 0,
+              'Sejarah Islam': 0
+            }
+          }));
+          setStudents(mappedStudents);
+        }
+      } catch (error) {
+        console.error('Failed to fetch students:', error);
+        setFetchError('Gagal mengambil data santri dari server.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
 
   const handleGradeChange = (studentId: string, subject: string, value: string) => {
-    const numValue = parseInt(value) || 0;
+    const errorKey = `${studentId}-${subject}`;
+    
+    if (value === '') {
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[errorKey];
+        return next;
+      });
+      setStudents(prev => prev.map(s => 
+        s.id === studentId 
+          ? { ...s, grades: { ...s.grades, [subject]: 0 } }
+          : s
+      ));
+      return;
+    }
+
+    const numValue = parseInt(value);
+    
+    if (isNaN(numValue) || numValue < 0 || numValue > 100) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [errorKey]: '0-100'
+      }));
+    } else {
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[errorKey];
+        return next;
+      });
+    }
+
+    // Still update the state so the input is controlled, but we show the error
     setStudents(prev => prev.map(s => 
       s.id === studentId 
-        ? { ...s, grades: { ...s.grades, [subject]: numValue } }
+        ? { ...s, grades: { ...s.grades, [subject]: isNaN(numValue) ? 0 : numValue } }
         : s
     ));
+  };
+
+  const handleSaveAll = async () => {
+    if (Object.keys(validationErrors).length > 0) {
+      alert('Terdapat kesalahan input. Harap periksa kembali nilai (0-100).');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // In a real app, we'd send all at once or in batches
+      // For this demo, we'll simulate the process
+      for (const student of students) {
+        for (const subject of subjects) {
+          const grade = student.grades[subject as keyof typeof student.grades] || 0;
+          await apiService.saveGrade(student.id, subject, grade);
+        }
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error('Failed to save grades:', error);
+      alert('Gagal menyimpan nilai. Periksa koneksi atau konfigurasi GAS.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const renderDashboard = () => (
@@ -152,6 +251,31 @@ export default function AcademicModule() {
   );
 
   const renderERapor = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-slate-100">
+          <Loader2 size={40} className="text-emerald-600 animate-spin mb-4" />
+          <p className="text-slate-500 font-medium">Mengambil data santri...</p>
+        </div>
+      );
+    }
+
+    if (fetchError) {
+      return (
+        <div className="p-8 bg-red-50 border border-red-100 rounded-2xl text-center">
+          <AlertTriangle size={40} className="text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-red-900 mb-2">Terjadi Kesalahan</h3>
+          <p className="text-red-700 mb-6">{fetchError}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      );
+    }
+
     if (user?.role === 'guru' || user?.role === 'admin') {
       return (
         <div className="space-y-6">
@@ -161,9 +285,24 @@ export default function AcademicModule() {
                 <FileText size={20} className="text-emerald-600" />
                 Input Nilai E-Rapor
               </h3>
-              <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all">
-                <Save size={18} />
-                Simpan Semua
+              <button 
+                onClick={handleSaveAll}
+                disabled={isSaving}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                  saveSuccess 
+                    ? "bg-emerald-100 text-emerald-700" 
+                    : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                )}
+              >
+                {isSaving ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : saveSuccess ? (
+                  <CheckCircle2 size={18} />
+                ) : (
+                  <Save size={18} />
+                )}
+                {isSaving ? 'Menyimpan...' : saveSuccess ? 'Tersimpan' : 'Simpan Semua'}
               </button>
             </div>
 
@@ -187,18 +326,34 @@ export default function AcademicModule() {
                           <p className="text-sm font-bold text-slate-900">{student.name}</p>
                           <p className="text-xs text-slate-500">NIS: {student.id}</p>
                         </td>
-                        {subjects.map(subject => (
-                          <td key={subject} className="px-6 py-4">
-                            <input 
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={student.grades[subject as keyof typeof student.grades] || ''}
-                              onChange={(e) => handleGradeChange(student.id, subject, e.target.value)}
-                              className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </td>
-                        ))}
+                        {subjects.map(subject => {
+                          const errorKey = `${student.id}-${subject}`;
+                          const hasError = !!validationErrors[errorKey];
+                          return (
+                            <td key={subject} className="px-6 py-4">
+                              <div className="relative">
+                                <input 
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={student.grades[subject as keyof typeof student.grades] || ''}
+                                  onChange={(e) => handleGradeChange(student.id, subject, e.target.value)}
+                                  className={cn(
+                                    "w-16 px-2 py-1 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 transition-all",
+                                    hasError 
+                                      ? "border-red-500 focus:ring-red-500 text-red-600" 
+                                      : "border-slate-200 focus:ring-emerald-500 text-slate-900"
+                                  )}
+                                />
+                                {hasError && (
+                                  <div className="absolute left-0 -bottom-4 whitespace-nowrap text-[9px] font-bold text-red-500 animate-pulse">
+                                    {validationErrors[errorKey]}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
                         <td className="px-6 py-4">
                           <span className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg">
                             {avg}

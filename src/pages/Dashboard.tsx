@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Calendar, 
@@ -7,20 +7,58 @@ import {
   ArrowRight,
   CheckCircle,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Database,
+  Wifi,
+  WifiOff,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/apiService';
 
 export default function Dashboard() {
   const { user } = useAuth();
-
-  const stats = [
-    { label: 'Total Siswa', value: '342', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Hadir Hari Ini', value: '98%', icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [stats, setStats] = useState([
+    { label: 'Total Siswa', value: '-', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Hadir Hari Ini', value: '-', icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Jadwal Aktif', value: '12', icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' },
     { label: 'Pesan Baru', value: '5', icon: MessageSquare, color: 'text-amber-600', bg: 'bg-amber-50' },
-  ];
+  ]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const students = await apiService.getStudents();
+        if (students) {
+          setDbStatus('connected');
+          setStats(prev => [
+            { ...prev[0], value: students.length.toString() },
+            { ...prev[1], value: '98%' }, // Mock for now
+            ...prev.slice(2)
+          ]);
+        } else {
+          setDbStatus('error');
+        }
+      } catch (error) {
+        setDbStatus('error');
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleSetup = async () => {
+    setDbStatus('checking');
+    const result = await apiService.setupDatabase();
+    if (result && result.success) {
+      alert('Database berhasil disiapkan! Silakan muat ulang halaman.');
+      window.location.reload();
+    } else {
+      setDbStatus('error');
+      alert('Gagal menyiapkan database. Pastikan URL GAS sudah benar dan izin diberikan.');
+    }
+  };
 
   return (
     <div className="space-y-10">
@@ -30,6 +68,25 @@ export default function Dashboard() {
           <p className="text-slate-500 mt-1">Selamat datang di dashboard MadrasahKu.</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+            dbStatus === 'connected' ? "bg-emerald-50 text-emerald-600" : 
+            dbStatus === 'error' ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-400"
+          )}>
+            {dbStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : 
+             dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+            {dbStatus === 'checking' ? 'Mengecek Database...' : 
+             dbStatus === 'connected' ? 'Database Terhubung' : 'Database Terputus'}
+          </div>
+          {dbStatus === 'error' && (
+            <button 
+              onClick={handleSetup}
+              className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all"
+            >
+              Siapkan Database
+            </button>
+          )}
+          <div className="h-6 w-px bg-slate-100 mx-1" />
           <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
             <Bell size={20} />
           </div>

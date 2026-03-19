@@ -9,10 +9,13 @@ import {
   Users,
   X,
   AlertCircle,
-  Download
+  Download,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { apiService } from '../services/apiService';
 
 const initialStudents = [
   { id: 1, name: 'Ahmad Fauzi', nis: '12345', status: 'Hadir', guardianPhone: '+6281234567890' },
@@ -30,10 +33,41 @@ const attendanceHistory = [
 
 export default function AttendanceModule() {
   const [studentList, setStudentList] = useState(initialStudents);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        const data = await apiService.getStudents();
+        if (data && Array.isArray(data) && data.length > 0) {
+          const mappedStudents = data.map((s: any) => ({
+            id: Number(s.id),
+            name: s.name,
+            nis: String(s.id), // Using ID as NIS for simplicity
+            status: 'Alpa', // Default status
+            guardianPhone: s.phone || '+6281234567890'
+          }));
+          setStudentList(mappedStudents);
+        }
+      } catch (error) {
+        console.error('Failed to fetch students:', error);
+        setFetchError('Gagal mengambil data santri.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
 
   const sendWhatsAppNotification = async (studentName: string, phone: string) => {
     try {
@@ -73,16 +107,20 @@ export default function AttendanceModule() {
     }
   }, [isScanning]);
 
-  function onScanSuccess(decodedText: string) {
+  async function onScanSuccess(decodedText: string) {
     // Assuming decodedText is the student's NIS
     const studentIndex = studentList.findIndex(s => s.nis === decodedText);
     
     if (studentIndex !== -1) {
+      const student = studentList[studentIndex];
       const updatedList = [...studentList];
       updatedList[studentIndex] = { ...updatedList[studentIndex], status: 'Hadir' };
       setStudentList(updatedList);
-      setLastScanned(studentList[studentIndex].name);
+      setLastScanned(student.name);
       setScanError(null);
+
+      // Auto-save to GAS
+      await apiService.saveAttendance(student.nis, student.name, 'Hadir');
     } else {
       setScanError(`NIS ${decodedText} tidak ditemukan.`);
       setLastScanned(null);
@@ -93,15 +131,37 @@ export default function AttendanceModule() {
     // We don't want to spam the console or UI with every frame failure
   }
 
-  const updateStatus = (id: number, newStatus: string) => {
+  const updateStatus = async (id: number, newStatus: string) => {
     setStudentList(prev => {
       const newList = prev.map(s => s.id === id ? { ...s, status: newStatus } : s);
       const student = newList.find(s => s.id === id);
       if (newStatus === 'Alpa' && student) {
         sendWhatsAppNotification(student.name, student.guardianPhone);
       }
+      
+      // Save to GAS
+      if (student) {
+        apiService.saveAttendance(student.nis, student.name, newStatus);
+      }
+      
       return newList;
     });
+  };
+
+  const handleSaveAll = async () => {
+    setIsSaving(true);
+    try {
+      for (const student of studentList) {
+        await apiService.saveAttendance(student.nis, student.name, student.status);
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error('Failed to save attendance:', error);
+      alert('Gagal menyimpan presensi. Periksa koneksi atau konfigurasi GAS.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const downloadCSV = () => {
@@ -139,8 +199,24 @@ export default function AttendanceModule() {
             <QrCode size={18} />
             Scan QR
           </button>
-          <button className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">
-            Simpan Presensi
+          <button 
+            onClick={handleSaveAll}
+            disabled={isSaving}
+            className={cn(
+              "flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium transition-all shadow-lg",
+              saveSuccess 
+                ? "bg-emerald-100 text-emerald-700 shadow-emerald-50" 
+                : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100 disabled:opacity-50"
+            )}
+          >
+            {isSaving ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : saveSuccess ? (
+              <CheckCircle2 size={18} />
+            ) : (
+              <CheckCircle size={18} />
+            )}
+            {isSaving ? 'Menyimpan...' : saveSuccess ? 'Tersimpan' : 'Simpan Presensi'}
           </button>
         </div>
       </div>
@@ -239,48 +315,60 @@ export default function AttendanceModule() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                <th className="px-6 py-4">Nama Santri</th>
-                <th className="px-6 py-4">NIS</th>
-                <th className="px-6 py-4">Status Kehadiran</th>
-                <th className="px-6 py-4">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {studentList.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-bold text-slate-900">{s.name}</p>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-500">{s.nis}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      {['Hadir', 'Izin', 'Sakit', 'Alpa'].map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => updateStatus(s.id, status)}
-                          className={cn(
-                            "px-3 py-1 text-[10px] font-bold rounded-full transition-all",
-                            s.status === status 
-                              ? (status === 'Hadir' ? "bg-emerald-600 text-white" : 
-                                 status === 'Alpa' ? "bg-red-600 text-white" : "bg-blue-600 text-white")
-                              : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                          )}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button className="text-xs font-bold text-emerald-600 hover:underline">Catatan</button>
-                  </td>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 size={40} className="text-emerald-600 animate-spin mb-4" />
+              <p className="text-slate-500 font-medium">Mengambil data santri...</p>
+            </div>
+          ) : fetchError ? (
+            <div className="p-10 text-center">
+              <p className="text-red-500 font-bold">{fetchError}</p>
+              <button onClick={() => window.location.reload()} className="mt-4 text-emerald-600 font-bold hover:underline">Coba Lagi</button>
+            </div>
+          ) : (
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                  <th className="px-6 py-4">Nama Santri</th>
+                  <th className="px-6 py-4">NIS</th>
+                  <th className="px-6 py-4">Status Kehadiran</th>
+                  <th className="px-6 py-4">Aksi</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {studentList.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-bold text-slate-900">{s.name}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-500">{s.nis}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        {['Hadir', 'Izin', 'Sakit', 'Alpa'].map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => updateStatus(s.id, status)}
+                            className={cn(
+                              "px-3 py-1 text-[10px] font-bold rounded-full transition-all",
+                              s.status === status 
+                                ? (status === 'Hadir' ? "bg-emerald-600 text-white" : 
+                                   status === 'Alpa' ? "bg-red-600 text-white" : "bg-blue-600 text-white")
+                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                            )}
+                          >
+                            {status}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button className="text-xs font-bold text-emerald-600 hover:underline">Catatan</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
