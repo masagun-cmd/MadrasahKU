@@ -62,6 +62,20 @@ export const apiService = {
   },
 
   /**
+   * Fetch all attendance records from Google Sheets
+   */
+  async getAttendance() {
+    if (!GAS_URL) return null;
+    try {
+      const response = await fetch(`${GAS_URL}?action=getAttendance`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching attendance:', error);
+      return null;
+    }
+  },
+
+  /**
    * Save student grade to Google Sheets
    */
   async saveGrade(studentId: string, subject: string, grade: number) {
@@ -153,6 +167,78 @@ export const apiService = {
       return { success: true };
     } catch (error) {
       console.error('Error saving finance:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Add a new student
+   */
+  async addStudent(student: { id: string; name: string; class: string; phone: string; grades?: string }) {
+    if (!GAS_URL) return null;
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'addStudent',
+          payload: student
+        })
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding student:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Update an existing student
+   */
+  async updateStudent(student: { id: string; name: string; class: string; phone: string; grades?: string }) {
+    if (!GAS_URL) return null;
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'updateStudent',
+          payload: student
+        })
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating student:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Delete a student
+   */
+  async deleteStudent(id: string) {
+    if (!GAS_URL) return null;
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'deleteStudent',
+          payload: { id }
+        })
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting student:', error);
       return { success: false, error };
     }
   }

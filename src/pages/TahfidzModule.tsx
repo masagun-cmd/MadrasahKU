@@ -19,7 +19,10 @@ import {
   Tooltip, 
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  BarChart,
+  Bar,
+  Cell
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiService } from '../services/apiService';
@@ -42,6 +45,7 @@ const recentActivities = [
 export default function TahfidzModule() {
   const [activities, setActivities] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [studentProgress, setStudentProgress] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -70,14 +74,51 @@ export default function TahfidzModule() {
           const student = studentData?.find((s: any) => String(s.id) === String(item.studentid));
           return {
             id: index,
+            studentId: item.studentid,
             student: student ? student.name : `Santri ${item.studentid}`,
             surah: item.surah,
             ayat: item.ayat,
             quality: item.status,
+            timestamp: item.timestamp,
             date: item.timestamp ? new Date(item.timestamp).toLocaleDateString('id-ID') : '-'
           };
         }).reverse(); // Newest first
         setActivities(mapped);
+
+        // Process student progress data
+        if (studentData) {
+          const progress = studentData.map((s: any) => {
+            const sActivities = mapped.filter((a: any) => String(a.studentId) === String(s.id));
+            
+            // Group by month (last 6 months)
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+            const now = new Date();
+            const last6Months = [];
+            for (let i = 5; i >= 0; i--) {
+              const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+              last6Months.push({
+                month: months[d.getMonth()],
+                monthIdx: d.getMonth(),
+                year: d.getFullYear(),
+                count: 0
+              });
+            }
+
+            sActivities.forEach((a: any) => {
+              if (!a.timestamp) return;
+              const ad = new Date(a.timestamp);
+              const target = last6Months.find(m => m.monthIdx === ad.getMonth() && m.year === ad.getFullYear());
+              if (target) target.count++;
+            });
+
+            return {
+              id: s.id,
+              name: s.name,
+              data: last6Months
+            };
+          });
+          setStudentProgress(progress);
+        }
       }
       
       if (studentData) {
@@ -217,9 +258,19 @@ export default function TahfidzModule() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Total Hafalan', value: '12 Juz', icon: BookOpen, color: 'bg-blue-500' },
-          { label: 'Setoran Minggu Ini', value: '45 Santri', icon: CheckCircle2, color: 'bg-emerald-500' },
+          { label: 'Setoran Minggu Ini', value: `${activities.filter(a => {
+            if (!a.timestamp) return false;
+            const d = new Date(a.timestamp);
+            const now = new Date();
+            const diff = now.getTime() - d.getTime();
+            return diff < 7 * 24 * 60 * 60 * 1000;
+          }).length} Santri`, icon: CheckCircle2, color: 'bg-emerald-500' },
           { label: 'Target Kurikulum', value: '85%', icon: TrendingUp, color: 'bg-amber-500' },
-          { label: 'Prestasi Terbaik', value: 'Yusuf M.', icon: Award, color: 'bg-purple-500' },
+          { label: 'Prestasi Terbaik', value: studentProgress.length > 0 ? studentProgress.sort((a, b) => {
+            const aTotal = a.data.reduce((acc: number, curr: any) => acc + curr.count, 0);
+            const bTotal = b.data.reduce((acc: number, curr: any) => acc + curr.count, 0);
+            return bTotal - aTotal;
+          })[0].name : 'Yusuf M.', icon: Award, color: 'bg-purple-500' },
         ].map((stat, i) => (
           <motion.div
             key={i}
@@ -233,6 +284,24 @@ export default function TahfidzModule() {
             </div>
             <p className="text-sm font-medium text-slate-500">{stat.label}</p>
             <p className="text-2xl font-bold text-slate-900 mt-1">{stat.value}</p>
+            
+            {/* Individual Student Progress Bar Chart below each stat card as requested */}
+            {studentProgress.length > i && (
+              <div className="mt-4 h-16 w-full opacity-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={studentProgress[i].data}>
+                    <Bar dataKey="count" radius={[2, 2, 0, 0]}>
+                      {studentProgress[i].data.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={i === 0 ? '#3b82f6' : i === 1 ? '#10b981' : i === 2 ? '#f59e0b' : '#a855f7'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="text-[8px] text-center text-slate-400 font-bold uppercase tracking-widest mt-1">
+                  Trend: {studentProgress[i].name}
+                </p>
+              </div>
+            )}
           </motion.div>
         ))}
       </div>

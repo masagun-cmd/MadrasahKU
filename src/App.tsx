@@ -8,6 +8,7 @@ import FinanceModule from './pages/FinanceModule';
 
 import AcademicModule from './pages/AcademicModule';
 import AttendanceModule from './pages/AttendanceModule';
+import StudentsModule from './pages/StudentsModule';
 import CommunicationModule from './pages/CommunicationModule';
 
 function AppContent() {
@@ -30,6 +31,8 @@ function AppContent() {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard />;
+      case 'santri':
+        return <StudentsModule />;
       case 'tahfidz':
         return <TahfidzModule />;
       case 'akademik':

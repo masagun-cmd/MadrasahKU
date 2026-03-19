@@ -30,6 +30,8 @@ function doGet(e) {
         return jsonResponse(getTahfidz());
       case 'getFinance':
         return jsonResponse(getFinance());
+      case 'getAttendance':
+        return jsonResponse(getAttendance());
       default:
         return jsonResponse({ error: 'Action not found' }, 404);
     }
@@ -91,6 +93,12 @@ function doPost(e) {
         return jsonResponse(saveTahfidz(data.payload));
       case 'saveFinance':
         return jsonResponse(saveFinance(data.payload));
+      case 'addStudent':
+        return jsonResponse(addStudent(data.payload));
+      case 'updateStudent':
+        return jsonResponse(updateStudent(data.payload));
+      case 'deleteStudent':
+        return jsonResponse(deleteStudent(data.payload));
       default:
         return jsonResponse({ error: 'Action not found' }, 404);
     }
@@ -135,6 +143,19 @@ function getTahfidz() {
 function getFinance() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('Finance') || createSheet(ss, 'Finance', ['StudentID', 'Type', 'Amount', 'Date', 'Status']);
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  
+  return data.map(row => {
+    let obj = {};
+    headers.forEach((header, i) => obj[header.toLowerCase()] = row[i]);
+    return obj;
+  });
+}
+
+function getAttendance() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Attendance') || createSheet(ss, 'Attendance', ['Timestamp', 'StudentID', 'StudentName', 'Status']);
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
   
@@ -211,6 +232,58 @@ function saveFinance(payload) {
   ]);
   
   return { success: true, message: 'Data keuangan berhasil disimpan' };
+}
+
+function addStudent(payload) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Students') || createSheet(ss, 'Students', ['ID', 'Name', 'Class', 'Phone', 'Grades']);
+  
+  sheet.appendRow([
+    payload.id,
+    payload.name,
+    payload.class,
+    payload.phone,
+    payload.grades || '{}'
+  ]);
+  
+  return { success: true, message: 'Santri berhasil ditambahkan' };
+}
+
+function updateStudent(payload) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Students');
+  if (!sheet) return { success: false, message: 'Sheet Students tidak ditemukan' };
+  
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] == payload.id) {
+      sheet.getRange(i + 1, 2).setValue(payload.name);
+      sheet.getRange(i + 1, 3).setValue(payload.class);
+      sheet.getRange(i + 1, 4).setValue(payload.phone);
+      if (payload.grades) {
+        sheet.getRange(i + 1, 5).setValue(payload.grades);
+      }
+      return { success: true, message: 'Data santri berhasil diperbarui' };
+    }
+  }
+  
+  return { success: false, message: 'Santri tidak ditemukan' };
+}
+
+function deleteStudent(payload) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Students');
+  if (!sheet) return { success: false, message: 'Sheet Students tidak ditemukan' };
+  
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] == payload.id) {
+      sheet.deleteRow(i + 1);
+      return { success: true, message: 'Santri berhasil dihapus' };
+    }
+  }
+  
+  return { success: false, message: 'Santri tidak ditemukan' };
 }
 
 function createSheet(ss, name, headers) {

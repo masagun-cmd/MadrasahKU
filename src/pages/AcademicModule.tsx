@@ -13,7 +13,8 @@ import {
   ArrowLeft,
   Loader2,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
@@ -56,6 +57,8 @@ export default function AcademicModule() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailStudent, setDetailStudent] = useState<any>(null);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -317,28 +320,41 @@ export default function AcademicModule() {
                     <th className="px-6 py-4 bg-emerald-50 text-emerald-700">Rata-rata</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {students.map(student => {
-                    const avg = Math.round((Object.values(student.grades) as number[]).reduce((a, b) => a + b, 0) / subjects.length);
-                    return (
-                      <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-bold text-slate-900">{student.name}</p>
-                          <p className="text-xs text-slate-500">NIS: {student.id}</p>
-                        </td>
-                        {subjects.map(subject => {
+                  <tbody className="divide-y divide-slate-100">
+                    {students.map(student => {
+                      const avg = Math.round((Object.values(student.grades) as number[]).reduce((a, b) => a + b, 0) / subjects.length);
+                      return (
+                        <tr 
+                          key={student.id} 
+                          className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                          onClick={() => {
+                            setDetailStudent(student);
+                            setShowDetailModal(true);
+                          }}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{student.name}</p>
+                                <p className="text-xs text-slate-500">NIS: {student.id}</p>
+                              </div>
+                              <ChevronRight size={16} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />
+                            </div>
+                          </td>
+                          {subjects.map(subject => {
                           const errorKey = `${student.id}-${subject}`;
                           const hasError = !!validationErrors[errorKey];
                           return (
                             <td key={subject} className="px-6 py-4">
                               <div className="relative">
-                                <input 
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  value={student.grades[subject as keyof typeof student.grades] || ''}
-                                  onChange={(e) => handleGradeChange(student.id, subject, e.target.value)}
-                                  className={cn(
+                                  <input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={student.grades[subject as keyof typeof student.grades] || ''}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => handleGradeChange(student.id, subject, e.target.value)}
+                                    className={cn(
                                     "w-16 px-2 py-1 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 transition-all",
                                     hasError 
                                       ? "border-red-500 focus:ring-red-500 text-red-600" 
@@ -437,6 +453,86 @@ export default function AcademicModule() {
     );
   };
 
+  const renderDetailModal = () => {
+    if (!detailStudent) return null;
+    const average = Math.round((Object.values(detailStudent.grades) as number[]).reduce((a: number, b: number) => a + b, 0) / subjects.length);
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+        >
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600">
+                <User size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">{detailStudent.name}</h3>
+                <p className="text-sm text-slate-500">NIS: {detailStudent.id} • Detail Capaian Akademik</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowDetailModal(false)}
+              className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="md:col-span-1 bg-emerald-50 p-6 rounded-2xl border border-emerald-100 text-center">
+              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Rata-rata</p>
+              <div className="flex items-baseline justify-center gap-1">
+                <p className="text-5xl font-black text-emerald-600">{average}</p>
+                <p className="text-sm font-bold text-emerald-400">/100</p>
+              </div>
+            </div>
+            <div className="md:col-span-2 grid grid-cols-1 gap-3">
+              {subjects.map(subject => {
+                const grade = detailStudent.grades[subject] || 0;
+                return (
+                  <div key={subject} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-700">{subject}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="h-1.5 w-20 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-emerald-500 rounded-full" 
+                          style={{ width: `${grade}%` }}
+                        />
+                      </div>
+                      <p className="text-sm font-bold text-slate-900">{grade}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200">
+            <h4 className="text-sm font-bold text-slate-900 mb-2">Analisis Perkembangan</h4>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Berdasarkan data nilai di atas, santri menunjukkan performa yang {average >= 80 ? 'sangat baik' : average >= 70 ? 'cukup baik' : 'perlu ditingkatkan'}. 
+              Fokus utama pada mata pelajaran dengan nilai di bawah rata-rata untuk mencapai target kurikulum semester ini.
+            </p>
+          </div>
+
+          <div className="mt-8 flex justify-end">
+            <button 
+              onClick={() => setShowDetailModal(false)}
+              className="px-6 py-2 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors"
+            >
+              Tutup Detail
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -481,6 +577,10 @@ export default function AcademicModule() {
         >
           {activeView === 'dashboard' ? renderDashboard() : renderERapor()}
         </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDetailModal && renderDetailModal()}
       </AnimatePresence>
     </div>
   );

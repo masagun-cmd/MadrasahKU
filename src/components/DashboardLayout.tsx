@@ -47,6 +47,7 @@ export default function DashboardLayout({ children, activeTab, setActiveTab }: {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'guru', 'wali', 'siswa'] },
+    { id: 'santri', label: 'Data Santri', icon: Users, roles: ['admin', 'guru'] },
     { id: 'tahfidz', label: 'Tahfidz & Diniyah', icon: BookOpen, roles: ['admin', 'guru', 'wali', 'siswa'] },
     { id: 'akademik', label: 'Akademik', icon: GraduationCap, roles: ['admin', 'guru', 'wali', 'siswa'] },
     { id: 'presensi', label: 'Presensi', icon: Calendar, roles: ['admin', 'guru', 'wali'] },

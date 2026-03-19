@@ -10,7 +10,10 @@ import {
   Loader2,
   X,
   Save,
-  Plus
+  Plus,
+  Settings,
+  ShieldCheck,
+  Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiService } from '../services/apiService';
@@ -27,6 +30,15 @@ export default function FinanceModule() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+
+  // Gateway Config state (initialized from env or localStorage)
+  const [gatewayConfig, setGatewayConfig] = useState({
+    provider: (import.meta as any).env?.VITE_PAYMENT_PROVIDER || localStorage.getItem('payment_provider') || 'midtrans',
+    clientKey: (import.meta as any).env?.VITE_PAYMENT_CLIENT_KEY || localStorage.getItem('payment_client_key') || '',
+    serverKey: (import.meta as any).env?.VITE_PAYMENT_SERVER_KEY || localStorage.getItem('payment_server_key') || '',
+    env: (import.meta as any).env?.VITE_PAYMENT_ENV || localStorage.getItem('payment_env') || 'sandbox'
+  });
 
   // Form state
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -94,6 +106,23 @@ export default function FinanceModule() {
     }
   };
 
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    
+    // Simulate saving to env by using localStorage for the demo
+    localStorage.setItem('payment_provider', gatewayConfig.provider);
+    localStorage.setItem('payment_client_key', gatewayConfig.clientKey);
+    localStorage.setItem('payment_server_key', gatewayConfig.serverKey);
+    localStorage.setItem('payment_env', gatewayConfig.env);
+    
+    setTimeout(() => {
+      setIsSaving(false);
+      setShowConfigModal(false);
+      alert('Konfigurasi berhasil disimpan (Simulasi). Untuk produksi, harap atur di menu Secrets platform.');
+    }, 1000);
+  };
+
   const totalIncome = transactions
     .filter(t => t.status === 'Lunas')
     .reduce((acc, curr) => acc + curr.amount, 0);
@@ -123,6 +152,121 @@ export default function FinanceModule() {
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showConfigModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl">
+                    <Settings size={20} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Konfigurasi Gateway</h3>
+                </div>
+                <button onClick={() => setShowConfigModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveConfig} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Provider</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setGatewayConfig(prev => ({ ...prev, provider: 'midtrans' }))}
+                      className={cn(
+                        "py-2 px-4 rounded-xl border font-bold text-sm transition-all",
+                        gatewayConfig.provider === 'midtrans' 
+                          ? "bg-emerald-600 border-emerald-600 text-white" 
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      )}
+                    >
+                      Midtrans
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGatewayConfig(prev => ({ ...prev, provider: 'xendit' }))}
+                      className={cn(
+                        "py-2 px-4 rounded-xl border font-bold text-sm transition-all",
+                        gatewayConfig.provider === 'xendit' 
+                          ? "bg-emerald-600 border-emerald-600 text-white" 
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      )}
+                    >
+                      Xendit
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Environment</label>
+                  <select 
+                    value={gatewayConfig.env}
+                    onChange={(e) => setGatewayConfig(prev => ({ ...prev, env: e.target.value }))}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="sandbox">Sandbox (Testing)</option>
+                    <option value="production">Production (Live)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Client Key</label>
+                  <input 
+                    type="password"
+                    value={gatewayConfig.clientKey}
+                    onChange={(e) => setGatewayConfig(prev => ({ ...prev, clientKey: e.target.value }))}
+                    placeholder="SB-Mid-client-..."
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Server Key</label>
+                  <input 
+                    type="password"
+                    value={gatewayConfig.serverKey}
+                    onChange={(e) => setGatewayConfig(prev => ({ ...prev, serverKey: e.target.value }))}
+                    placeholder="SB-Mid-server-..."
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="text-amber-600 shrink-0" size={18} />
+                    <p className="text-[10px] text-amber-700 leading-relaxed">
+                      <strong>Penting:</strong> API Key di atas hanya disimpan secara lokal untuk simulasi. 
+                      Untuk penggunaan nyata, harap masukkan variabel berikut di menu <strong>Settings &gt; Secrets</strong> platform:
+                      <br /><br />
+                      <code>VITE_PAYMENT_PROVIDER</code><br />
+                      <code>VITE_PAYMENT_CLIENT_KEY</code><br />
+                      <code>VITE_PAYMENT_SERVER_KEY</code><br />
+                      <code>VITE_PAYMENT_ENV</code>
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isSaving}
+                  className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                  {isSaving ? 'Menyimpan...' : 'Simpan Konfigurasi'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showModal && (
@@ -298,8 +442,48 @@ export default function FinanceModule() {
 
         <div className="space-y-8">
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-900 mb-6">Payment Gateway</h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-slate-900">Payment Gateway</h3>
+              <button 
+                onClick={() => setShowConfigModal(true)}
+                className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"
+                title="Konfigurasi Gateway"
+              >
+                <Settings size={18} />
+              </button>
+            </div>
             <div className="space-y-4">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <CreditCard className="text-emerald-600" size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Status Gateway</p>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
+                        {gatewayConfig.provider} • {gatewayConfig.env}
+                      </p>
+                    </div>
+                  </div>
+                  <div className={cn(
+                    "w-2 h-2 rounded-full animate-pulse",
+                    gatewayConfig.clientKey ? "bg-emerald-500" : "bg-slate-300"
+                  )} />
+                </div>
+                {gatewayConfig.clientKey ? (
+                  <div className="mt-3 flex items-center gap-2 text-[10px] text-emerald-600 font-bold">
+                    <ShieldCheck size={12} />
+                    API Key Terkonfigurasi
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2 text-[10px] text-amber-600 font-bold">
+                    <AlertTriangle size={12} />
+                    Belum Terkonfigurasi
+                  </div>
+                )}
+              </div>
+              
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -334,7 +518,7 @@ export default function FinanceModule() {
               </div>
             </div>
             <p className="text-[10px] text-slate-400 mt-6 text-center italic">
-              *Integrasi Midtrans/Xendit Aktif
+              *Integrasi {gatewayConfig.provider === 'midtrans' ? 'Midtrans' : 'Xendit'} Aktif
             </p>
           </div>
 

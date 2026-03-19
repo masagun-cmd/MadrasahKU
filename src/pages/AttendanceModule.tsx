@@ -24,16 +24,11 @@ const initialStudents = [
   { id: 4, name: 'Fulan bin Fulan', nis: '12348', status: 'Alpa', guardianPhone: '+6281234567893' },
 ];
 
-const attendanceHistory = [
-  { id: 1, date: '2024-03-18', name: 'Ahmad Fauzi', status: 'Hadir', timestamp: '07:30:45' },
-  { id: 2, date: '2024-03-18', name: 'Siti Aminah', status: 'Sakit', timestamp: '08:15:20' },
-  { id: 3, date: '2024-03-17', name: 'Yusuf Mansur', status: 'Hadir', timestamp: '07:25:10' },
-  { id: 4, date: '2024-03-17', name: 'Fulan bin Fulan', status: 'Hadir', timestamp: '07:40:00' },
-];
-
 export default function AttendanceModule() {
   const [studentList, setStudentList] = useState(initialStudents);
+  const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
@@ -67,7 +62,29 @@ export default function AttendanceModule() {
     };
 
     fetchStudents();
+    fetchHistory();
   }, []);
+
+  const fetchHistory = async () => {
+    setIsHistoryLoading(true);
+    try {
+      const data = await apiService.getAttendance();
+      if (data && Array.isArray(data)) {
+        const mapped = data.map((item: any, index: number) => ({
+          id: index,
+          date: item.timestamp ? new Date(item.timestamp).toLocaleDateString('id-ID') : '-',
+          name: item.studentname,
+          status: item.status,
+          timestamp: item.timestamp ? new Date(item.timestamp).toLocaleTimeString('id-ID') : '-'
+        })).reverse();
+        setAttendanceHistory(mapped);
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance history:', error);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
 
   const sendWhatsAppNotification = async (studentName: string, phone: string) => {
     try {
@@ -121,6 +138,7 @@ export default function AttendanceModule() {
 
       // Auto-save to GAS
       await apiService.saveAttendance(student.nis, student.name, 'Hadir');
+      fetchHistory();
     } else {
       setScanError(`NIS ${decodedText} tidak ditemukan.`);
       setLastScanned(null);
@@ -141,7 +159,9 @@ export default function AttendanceModule() {
       
       // Save to GAS
       if (student) {
-        apiService.saveAttendance(student.nis, student.name, newStatus);
+        apiService.saveAttendance(student.nis, student.name, newStatus).then(() => {
+          fetchHistory();
+        });
       }
       
       return newList;
@@ -155,6 +175,7 @@ export default function AttendanceModule() {
         await apiService.saveAttendance(student.nis, student.name, student.status);
       }
       setSaveSuccess(true);
+      fetchHistory();
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to save attendance:', error);
@@ -398,29 +419,44 @@ export default function AttendanceModule() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {attendanceHistory.map((h) => (
-                <tr key={h.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-slate-600 font-medium">{h.date}</td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-bold text-slate-900">{h.name}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={cn(
-                      "text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider",
-                      h.status === 'Hadir' ? "bg-emerald-100 text-emerald-700" : 
-                      h.status === 'Alpa' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
-                    )}>
-                      {h.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-400">
-                    <div className="flex items-center gap-1">
-                      <Clock size={14} />
-                      {h.timestamp}
-                    </div>
+              {isHistoryLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-10 text-center">
+                    <Loader2 size={32} className="text-emerald-600 animate-spin mx-auto mb-2" />
+                    <p className="text-xs text-slate-400">Memuat riwayat...</p>
                   </td>
                 </tr>
-              ))}
+              ) : attendanceHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-10 text-center text-slate-400 text-sm">
+                    Belum ada riwayat presensi.
+                  </td>
+                </tr>
+              ) : (
+                attendanceHistory.slice(0, 10).map((h) => (
+                  <tr key={h.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{h.date}</td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-bold text-slate-900">{h.name}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={cn(
+                        "text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider",
+                        h.status === 'Hadir' ? "bg-emerald-100 text-emerald-700" : 
+                        h.status === 'Alpa' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                      )}>
+                        {h.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-400">
+                      <div className="flex items-center gap-1">
+                        <Clock size={14} />
+                        {h.timestamp}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
